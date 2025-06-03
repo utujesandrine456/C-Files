@@ -13,10 +13,10 @@ DATA_DIR = "../data"
 BOOK_FILE = os.path.join(DATA_DIR, "books.dat")
 AUTHOR_FILE = os.path.join(DATA_DIR, "authors.dat")
 PUBLISHER_FILE = os.path.join(DATA_DIR, "publishers.dat")
-BORROW_FILE = os.path.join(DATA_DIR, "borrowings.dat")
+BORROW_FILE = os.path.join(DATA_DIR, "borrow.dat")
 FINE_FILE = os.path.join(DATA_DIR, "fines.dat")
 MEMBER_FILE = os.path.join(DATA_DIR, "members.dat")
-STAFF_FILE = os.path.join(DATA_DIR, "staff.dat")
+STAFF_FILE = os.path.join(DATA_DIR, "staffs.dat")
 
 # Ensure data directory exists
 if not os.path.exists(DATA_DIR):
