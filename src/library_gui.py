@@ -3,6 +3,7 @@ from tkinter import messagebox, ttk
 import struct
 import os
 import logging
+import uuid
 
 # Set up logging
 logging.basicConfig(filename='library_gui.log', level=logging.DEBUG, 
@@ -57,6 +58,27 @@ class LibraryManagement:
         for text, command in buttons:
             tk.Button(self.main_frame, text=text, width=20, command=command).pack(pady=5)
 
+    def check_book_id_exists(self, book_id):
+        try:
+            with open(BOOK_FILE, "rb") as fp:
+                record_size = struct.calcsize('i100sii20s50sii30s')  # 220 bytes
+                while True:
+                    data = fp.read(record_size)
+                    if not data:
+                        break
+                    if len(data) != record_size:
+                        logging.error(f"Corrupted record in {BOOK_FILE}: expected {record_size} bytes, got {len(data)} bytes")
+                        continue  # Skip corrupted record
+                    existing_id, *_ = struct.unpack('i100sii20s50sii30s', data)
+                    if existing_id == book_id:
+                        return True
+            return False
+        except FileNotFoundError:
+            return False
+        except struct.error as e:
+            logging.error(f"Struct error in check_book_id_exists: {e}")
+            return False
+
     def add_book(self):
         add_window = tk.Toplevel(self.root)
         add_window.title("Add Book")
@@ -81,21 +103,40 @@ class LibraryManagement:
                 copies_available = int(entries["Copies Available"].get())
                 shelf_location = entries["Shelf Location"].get().strip()
 
-                if not all([book_id, title, author_id, publisher_id, isbn, genre, year_published, copies_available, shelf_location]):
-                    messagebox.showerror("Error", "All fields are required!")
+                if not (book_id > 0 and title.strip() and author_id > 0 and publisher_id > 0 and isbn.strip() and genre.strip() and year_published > 0 and copies_available >= 0 and shelf_location.strip()):
+                    messagebox.showerror("Error", "All fields must be valid and non-empty! IDs and Year must be positive, Copies non-negative.")
                     return
 
-                title = title[:100].ljust(100, '\0')
-                isbn = isbn[:20].ljust(20, '\0')
-                genre = genre[:50].ljust(50, '\0')
-                shelf_location = shelf_location[:30].ljust(30, '\0')
+                try:
+                    if self.check_book_id_exists(book_id):
+                        messagebox.showerror("Error", f"Book ID {book_id} already exists!")
+                        return
+                except Exception as e:
+                    messagebox.showerror("Error", f"Failed to check book ID: {e}. The book database may be corrupted.")
+                    logging.error(f"Error checking book ID {book_id}: {e}")
+                    return
 
-                with open(BOOK_FILE, "ab") as fp:
-                    fp.write(struct.pack('i100sii20s50si30s', book_id, title.encode(), author_id, publisher_id, isbn.encode(), genre.encode(), year_published, copies_available, shelf_location.encode()))
-                messagebox.showinfo("Success", "Book added successfully!")
-                add_window.destroy()
+                try:
+                    title = title[:100].ljust(100, '\0').encode('utf-8')
+                    isbn = isbn[:20].ljust(20, '\0').encode('utf-8')
+                    genre = genre[:50].ljust(50, '\0').encode('utf-8')
+                    shelf_location = shelf_location[:30].ljust(30, '\0').encode('utf-8')
+                except UnicodeEncodeError:
+                    messagebox.showerror("Error", "Invalid characters in input fields!")
+                    logging.error("Failed to add book: Invalid characters in input.")
+                    return
+
+                try:
+                    with open(BOOK_FILE, "ab") as fp:
+                        fp.write(struct.pack('i100sii20s50sii30s', book_id, title, author_id, publisher_id, isbn, genre, year_published, copies_available, shelf_location))
+                    messagebox.showinfo("Success", "Book added successfully!")
+                    add_window.destroy()
+                except IOError as e:
+                    messagebox.showerror("Error", f"Failed to save book: {e}")
+                    logging.error(f"Failed to write to {BOOK_FILE}: {e}")
             except ValueError:
                 messagebox.showerror("Error", "Invalid input! Ensure ID, Year, and Copies are integers.")
+                logging.error("Failed to add book: Invalid input for integers.")
 
         tk.Button(add_window, text="Save", command=save_book).pack(pady=10)
 
@@ -118,11 +159,15 @@ class LibraryManagement:
 
         try:
             with open(BOOK_FILE, "rb") as fp:
+                record_size = struct.calcsize('i100sii20s50sii30s')
                 while True:
-                    data = fp.read(struct.calcsize('i100sii20s50si30s'))
+                    data = fp.read(record_size)
                     if not data:
                         break
-                    book_id, title, author_id, publisher_id, isbn, genre, year_published, copies_available, shelf_location = struct.unpack('i100sii20s50si30s', data)
+                    if len(data) != record_size:
+                        logging.error(f"Corrupted record in {BOOK_FILE}: expected {record_size} bytes, got {len(data)} bytes")
+                        continue
+                    book_id, title, author_id, publisher_id, isbn, genre, year_published, copies_available, shelf_location = struct.unpack('i100sii20s50sii30s', data)
                     try:
                         tree.insert("", "end", values=(
                             book_id,
